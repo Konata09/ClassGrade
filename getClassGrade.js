@@ -3,13 +3,14 @@ const fs = require('fs');
 const SocksProxyAgent = require('socks-proxy-agent');
 
 let conf = {
-    "site": "",
-    "xh": "",
-    "password": "",
-    "proxy": "",
-    "xnxqid": "",
-    "class": [],
-    "student": []
+    "site": "", // 教务系统地址
+    "xh": "", // 查询人的学号，用于获取 token
+    "password": "", // 查询人的密码
+    "proxy": "", // 支持 Socks4 和 Socks5 代理 
+    "xnxqid": "", // 学年学期
+    "class": [], // 班级，为学号去除最后两位
+    "student": [], // 要查询的学号，可以与班级同时填写
+    "studentperclass": 30 // 每个班级的人数
 }
 
 
@@ -38,18 +39,17 @@ async function begin() {
             conf = data;
             if (conf.proxy !== '')
                 agent = new SocksProxyAgent(conf.proxy);
-            const token = await apiLogin();
+            const token = await apiLogin().catch(err=>console.log(`ERROR: 登录失败 ${err}`));
             await Promise.all(conf.class.map(async (c) => {
-                for (let i = 1; i <= 36; i++) {
+                for (let i = 1; i <= conf.studentperclass; i++)
                     await checkFromApi(c + ('0' + i).slice(-2), token).catch(err => console.log(err));
-                }
             }))
             await Promise.all(conf.student.map(async (s) => {
                 await checkFromApi(s, token).catch(err => console.log(err));
             }))
             writeCSV();
         })
-        .catch(err => console.log(`ERROR: conf.json 文件不存在或格式不正确\n${err}`))
+        .catch(err => console.log(`ERROR: conf.json 文件不存在或格式不正确\n${err}`));
 }
 
 // 查询单人成绩
@@ -76,10 +76,9 @@ function checkFromApi(xh, token) {
                 }
                 resolve();
             })
-            .catch(err => reject(`ERROR: 查询失败 ${xh} ${err}`))
+            .catch(err => reject(`ERROR: 查询失败 ${xh} ${err}`));
     })
 }
-
 
 // api 登录
 function apiLogin() {
@@ -98,9 +97,10 @@ function apiLogin() {
                 reject(res.data.msg);
             else
                 resolve(token);
-        }).catch((err) => (reject(err)));
+        }).catch(err => reject(err));
     });
 }
+
 // 写入 CSV 文件
 function writeCSV() {
     let csvContent = '\uFEFF';
@@ -110,8 +110,8 @@ function writeCSV() {
 }
 
 // 读取 json 文件
-async function readLocalFile(filename) {
-    let data = await new Promise((resolve, reject) => {
+function readLocalFile(filename) {
+    return new Promise((resolve, reject) => {
         fs.readFile(filename, 'utf8', (err, data) => {
             if (err) reject(err);
             try {
@@ -122,7 +122,6 @@ async function readLocalFile(filename) {
             }
         });
     });
-    return data;
 }
 
 begin();
